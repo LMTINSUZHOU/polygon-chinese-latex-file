@@ -7,19 +7,19 @@
 % From: https://github.com/fstqwq/polygon-chinese-template
 % Modified by frostice: https://github.com/fy-hb/polygon-chinese-template
 %
- 
+
 \ProvidesPackage{olymp}
  
 \usepackage{verbatim}
-\usepackage{paracol}
- 
- 
+\usepackage{longtable}
+
+
 \newif\if@landscape\@landscapefalse
 \newif\if@russian\@russianfalse
 \newif\if@ukrainian\@ukrainianfalse
 \newif\if@arabic\@arabicfalse
 \newif\if@chinese\@chinesefalse
- 
+
 \DeclareOption{landscape}{
     \@landscapetrue
 }
@@ -631,58 +631,139 @@
  
 % This is magic, which delete space after verbatiminput
 \addto@hook{\every@verbatim}{\topsep=0pt\relax}
+
+% Read file-based examples one line at a time.  A normal tabular (and a
+% longtable row containing a minipage) cannot be split across pages, so each
+% pair of input/output lines is emitted as its own row.
+\ExplSyntaxOn
+\ior_new:N \l__olymp_example_ior
+\seq_new:N \l__olymp_example_input_seq
+\seq_new:N \l__olymp_example_output_seq
+\tl_new:N \l__olymp_example_input_line_tl
+\tl_new:N \l__olymp_example_output_line_tl
+\tl_new:N \l__olymp_example_rows_tl
+\int_new:N \l__olymp_example_line_count_int
+
+\cs_new_protected:Npn \__olymp_example_read_file:nN #1#2
+  {
+    \seq_clear:N #2
+    \ior_open:Nn \l__olymp_example_ior {#1}
+    \ior_str_map_inline:Nn \l__olymp_example_ior
+      { \seq_put_right:Nn #2 {##1} }
+    \ior_close:N \l__olymp_example_ior
+  }
+
+\cs_new:Npn \__olymp_example_space:
+  { \hspace*{\fontdimen2\font} }
+
+\cs_new_protected:Npn \__olymp_example_typeset_line:n #1
+  {
+    \tl_set:Nn \l_tmpa_tl {#1}
+    \tl_replace_all:Nnn \l_tmpa_tl { ~ } { \__olymp_example_space: }
+    \tl_use:N \l_tmpa_tl
+  }
+
+\cs_new_protected:Npn \olymp_example_file:nn #1#2
+  {
+    \__olymp_example_read_file:nN {#1} \l__olymp_example_input_seq
+    \__olymp_example_read_file:nN {#2} \l__olymp_example_output_seq
+    \int_set:Nn \l__olymp_example_line_count_int
+      {
+        \int_max:nn
+          { \seq_count:N \l__olymp_example_input_seq }
+          { \seq_count:N \l__olymp_example_output_seq }
+      }
+    \int_compare:nNnT { \l__olymp_example_line_count_int } = { 0 }
+      { \int_set:Nn \l__olymp_example_line_count_int { 1 } }
+    \tl_clear:N \l__olymp_example_rows_tl
+    \int_step_inline:nn { \l__olymp_example_line_count_int }
+      {
+        \seq_if_empty:NTF \l__olymp_example_input_seq
+          { \tl_clear:N \l__olymp_example_input_line_tl }
+          {
+            \seq_pop_left:NN
+              \l__olymp_example_input_seq
+              \l__olymp_example_input_line_tl
+          }
+        \seq_if_empty:NTF \l__olymp_example_output_seq
+          { \tl_clear:N \l__olymp_example_output_line_tl }
+          {
+            \seq_pop_left:NN
+              \l__olymp_example_output_seq
+              \l__olymp_example_output_line_tl
+          }
+        \tl_put_right:Nx \l__olymp_example_rows_tl
+          {
+            \exp_not:N \strut
+            \exp_not:N \__olymp_example_typeset_line:n
+              { \exp_not:V \l__olymp_example_input_line_tl }
+            &
+            \exp_not:N \strut
+            \exp_not:N \__olymp_example_typeset_line:n
+              { \exp_not:V \l__olymp_example_output_line_tl }
+            \exp_not:N \\
+          }
+      }
+    \tl_use:N \l__olymp_example_rows_tl
+    \hline
+  }
+\ExplSyntaxOff
  
 % :FIXME:
 \newenvironment{example}[1][]{
     \s@tm@cr@s#1
     \ttfamily\obeylines\obeyspaces\frenchspacing
-
-    % Allow the input/output columns to continue across page boundaries.
-    \setlength{\columnsep}{2\tabcolsep}
-    \setlength{\columnseprule}{\arrayrulewidth}
-    \setcolumnwidth{\exmpwidinf,\exmpwidouf}
-
     \newcommand{\exmp}[2]{
     \ifdefined\NoExamples\else%
-        \begin{paracol}{2}
-            \rightskip=0pt plus 1fill\relax
-            ##1\par
-
-            \switchcolumn
-
-            \rightskip=0pt plus 1fill\relax
-            ##2\par
-        \end{paracol}
-        \noindent\hrule height\arrayrulewidth\relax
+        \begin{minipage}[t]{\exmpwidinf}\rightskip=0pt plus 1fill\relax##1\medskip\end{minipage}&
+        \begin{minipage}[t]{\exmpwidouf}\rightskip=0pt plus 1fill\relax##2\medskip\end{minipage}\\
+        \hline
     \fi%
     }
 
     \newcommand{\exmpfile}[2]{
     \ifdefined\NoExamples\else%
-        \exmp{
-            \verbatiminput{##1}
-        }{
-            \verbatiminput{##2}
-        }%
+       \csname olymp_example_file:nn\endcsname{##1}{##2}%
     \fi%
     }
 
+
     \ifdefined\NoExamples\else%
-        \par
-        \noindent\hrule height\arrayrulewidth\relax
-        \begin{paracol}{2}
-            \centering
-            \bf\texttt{\InputFileName}\par
-
-            \switchcolumn
-
-            \centering
-            \bf\texttt{\OutputFileName}\par
-        \end{paracol}
-        \noindent\hrule height\arrayrulewidth\relax
+    \if@twocolumn
+    \begin{tabular}{|p{\exmpwidinf}|p{\exmpwidouf}|}
+        \hline
+        \multicolumn{1}{|c|}{\bf\texttt{\InputFileName}}&
+        \multicolumn{1}{|c|}{\bf\texttt{\OutputFileName}}\\
+        \hline
+    \else
+    \setlength{\LTleft}{0pt}
+    \setlength{\LTright}{\fill}
+    \setlength{\LTpre}{0pt}
+    \setlength{\LTpost}{0pt}
+    \begin{longtable}{|p{\exmpwidinf}|p{\exmpwidouf}|}
+        \hline
+        \multicolumn{1}{|c|}{\bf\texttt{\InputFileName}}&
+        \multicolumn{1}{|c|}{\bf\texttt{\OutputFileName}}\\
+        \hline
+        \endfirsthead
+        \hline
+        \multicolumn{1}{|c|}{\bf\texttt{\InputFileName}}&
+        \multicolumn{1}{|c|}{\bf\texttt{\OutputFileName}}\\
+        \hline
+        \endhead
+        \hline
+        \endfoot
+        \endlastfoot
+    \fi
     \fi%
 }{
-    \columnratio{}
+    \ifdefined\NoExamples\else%
+    \if@twocolumn
+    \end{tabular}
+    \else
+    \end{longtable}
+    \fi
+    \fi%
 }
 
 \newenvironment{examplewide}[1][]{%
